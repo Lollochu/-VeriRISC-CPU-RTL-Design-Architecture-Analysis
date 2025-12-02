@@ -1,0 +1,13 @@
+module multiplexor #(
+    parameter WIDTH = 5
+)(
+    input  [WIDTH-1:0] in0,      // Ingresso 0 (solitamente PC Address)
+    input  [WIDTH-1:0] in1,      // Ingresso 1 (solitamente IR Address)
+    input              sel,      // Segnale di selezione
+    output [WIDTH-1:0] mux_out   // Uscita
+);
+
+    // Se sel è 0 passa in0, se è 1 passa in1
+    assign mux_out = (sel) ? in1 : in0;
+
+endmodule
