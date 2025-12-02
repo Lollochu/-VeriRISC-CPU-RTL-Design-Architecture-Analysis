@@ -1,0 +1,30 @@
+module memory #(
+    parameter AWIDTH = 5,   // Address Width: 5 bit (32 locazioni)
+    parameter DWIDTH = 8    // Data Width: 8 bit
+)(
+    input               clk,   // Clock
+    input               wr,    // Write Enable (Scrittura)
+    input               rd,    // Read Enable (Lettura)
+    input  [AWIDTH-1:0] addr,  // Indirizzo
+    inout  [DWIDTH-1:0] data   // Bus Dati Bidirezionale
+);
+
+    // Definizione della matrice di memoria (RAM)
+    // La dimensione è 2 elevato alla AWIDTH (2^5 = 32 righe)
+    reg [DWIDTH-1:0] mem [0:(1<<AWIDTH)-1];
+
+    // --- Operazione di Scrittura (Sincrona) ---
+    // Scrive i dati nella memoria al fronte di salita del clock se 'wr' è attivo
+    always @(posedge clk) begin
+        if (wr) begin
+            mem[addr] <= data;
+        end
+    end
+
+    // --- Operazione di Lettura (Asincrona / Continuous Assignment) ---
+    // Se 'rd' è attivo (1), il bus 'data' viene pilotato dal contenuto della memoria.
+    // Se 'rd' è disattivo (0), il bus viene messo in Alta Impedenza ('bz),
+    // scollegando la memoria dal bus per permettere ad altri (es. ALU) di scrivere.
+    assign data = (rd) ? mem[addr] : {DWIDTH{1'bz}};
+
+endmodule
