@@ -1,0 +1,97 @@
+module controller (
+    input  [2:0] phase,    // Fase attuale (Fetch, Decode, Execute...)
+    input  [2:0] opcode,   // Istruzione corrente (ADD, HLT, JMP...)
+    input        zero,     // Flag Zero dalla ALU (per l'istruzione SKZ)
+    
+    output reg   sel,      // Select per Mux indirizzi
+    output reg   rd,       // Read Memory
+    output reg   wr,       // Write Memory
+    output reg   ld_ir,    // Load Instruction Register
+    output reg   ld_ac,    // Load Accumulator
+    output reg   ld_pc,    // Load Program Counter (JMP)
+    output reg   inc_pc,   // Increment Program Counter
+    output reg   halt,     // Halt CPU
+    output reg   data_e    // Enable Data Driver (per scrivere in memoria)
+);
+
+    // Definizioni Opcode per leggibilità
+    localparam HLT=3'b000, SKZ=3'b001, ADD=3'b010, AND=3'b011;
+    localparam XOR=3'b100, LDA=3'b101, STO=3'b110, JMP=3'b111;
+
+    always @(*) begin
+        // Valori di default (per evitare latch indesiderati)
+        sel    = 0; rd     = 0; wr     = 0; 
+        ld_ir  = 0; ld_ac  = 0; ld_pc  = 0; 
+        inc_pc = 0; halt   = 0; data_e = 0;
+
+        case (phase)
+            // Fase 0: INST_ADDR - Mette l'indirizzo del PC sul bus
+            3'd0: begin 
+                sel = 1; // Seleziona PC nel Mux
+                inc_pc = 1; // Prepara incremento PC
+            end
+
+            // Fase 1: INST_FETCH - Legge l'istruzione dalla memoria
+            3'd1: begin
+                sel = 1; 
+                rd  = 1; 
+            end
+
+            // Fase 2: INST_LOAD - Carica l'istruzione nel registro IR
+            3'd2: begin
+                sel   = 1; 
+                rd    = 1; 
+                ld_ir = 1;
+            end
+
+            // Fase 3: IDLE - Attesa/Decodifica
+            3'd3: begin
+                sel = 1; 
+                rd  = 1; 
+                ld_ir = 1;
+            end
+
+            // Fase 4: OP_ADDR - Mette l'indirizzo dell'operando sul bus
+            3'd4: begin
+                sel = 0; // Seleziona IR nel Mux (parte indirizzo)
+                if (opcode == HLT) halt = 1;
+            end
+
+            // Fase 5: OP_FETCH - Legge l'operando (se serve)
+            3'd5: begin
+                sel = 0;
+                // Esegue ALU operation per istruzioni aritmetiche
+                if (opcode == ADD || opcode == AND || opcode == XOR || opcode == LDA) 
+                    rd = 1; 
+            end
+
+            // Fase 6: ALU_OP - Esecuzione vera e propria
+            3'd6: begin
+                sel = 0;
+                if (opcode == ADD || opcode == AND || opcode == XOR || opcode == LDA) begin
+                    rd = 1; 
+                    ld_ac = 1; // Salva risultato nell'accumulatore
+                end
+                
+                // Gestione SKZ (Skip if Zero): incrementa PC se accumulatore è zero
+                if (opcode == SKZ && zero) inc_pc = 1;
+                
+                // Gestione JMP: Carica nuovo indirizzo nel PC
+                if (opcode == JMP) ld_pc = 1;
+            end
+
+            // Fase 7: STORE - Scrittura in memoria (solo per STO)
+            3'd7: begin
+                sel = 0;
+                if (opcode == STO) begin
+                    wr = 1;     // Scrivi in memoria
+                    data_e = 1; // Abilita uscita driver dati
+                end
+                // Per LDA, JMP, ecc, non fa nulla qui
+                if (opcode == ADD || opcode == AND || opcode == XOR || opcode == LDA)
+                   ld_ac = 1; // Mantiene il load per sicurezza temporale
+            end
+        endcase
+    end
+
+endmodule
