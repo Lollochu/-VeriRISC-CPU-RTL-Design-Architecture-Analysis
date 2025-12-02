@@ -1,0 +1,12 @@
+module driver #(
+    parameter WIDTH = 8
+)(
+    input  [WIDTH-1:0] data_in,  // Dato in ingresso
+    input              data_en,  // Abilitazione (Enable)
+    output [WIDTH-1:0] data_out  // Uscita verso il bus
+);
+
+    // Se abilitato passa il dato, altrimenti alta impedenza (Z)
+    assign data_out = (data_en) ? data_in : {WIDTH{1'bz}};
+
+endmodule
