@@ -1,0 +1,93 @@
+module cpu (
+    input clk,
+    input rst,
+    output halt
+);
+
+    // --- 1. Definizione dei fili di interconnessione (Wires) ---
+    
+    // Bus Dati e Indirizzi
+    wire [7:0] data;       // Il bus dati principale (bidirezionale)
+    wire [4:0] addr;       // L'indirizzo che va alla memoria
+    
+    // Segnali di Controllo (dal Controller agli altri moduli)
+    wire sel, rd, wr, ld_ir, ld_ac, ld_pc, inc_pc, data_e;
+    
+    // Uscite dei Registri e ALU
+    wire [7:0] alu_out;
+    wire [7:0] ac_out;     // Uscita Accumulatore
+    wire [4:0] pc_addr;    // Indirizzo dal Program Counter
+    wire [4:0] ir_addr;    // Parte indirizzo dell'istruzione (IR[4:0])
+    wire [2:0] opcode;     // Parte opcode dell'istruzione (IR[7:5])
+    wire       zero;       // Flag Zero dalla ALU
+    
+    // Gestione Fase
+    wire [2:0] phase;      // Fase corrente (0-7)
+
+    // --- 2. Istanziazione dei Moduli ---
+
+    // A. Generatore di Fase (Counter istanziato a 3 bit)
+    // Nota: resetta a 0, conta sempre (enable=1), non carica mai dati esterni (load=0)
+    counter #(3) counter_clk_inst (
+        .clk(clk), .rst(rst), .load(1'b0), .enab(1'b1), 
+        .cnt_in(3'b000), .cnt_out(phase)
+    );
+
+    // B. Controller (FSM)
+    // Prende la fase e l'opcode, decide cosa fare
+    controller controller_inst (
+        .phase(phase), .opcode(opcode), .zero(zero),
+        .sel(sel), .rd(rd), .wr(wr), 
+        .ld_ir(ld_ir), .ld_ac(ld_ac), .ld_pc(ld_pc), 
+        .inc_pc(inc_pc), .halt(halt), .data_e(data_e)
+    );
+
+    // C. Multiplexer Indirizzi
+    // Sceglie se mandare alla memoria l'indirizzo del PC o quello dentro l'istruzione (IR)
+    multiplexor #(5) address_mux_inst (
+        .in0(pc_addr), .in1(ir_addr), .sel(sel), .mux_out(addr)
+    );
+
+    // D. Program Counter (Counter istanziato a 5 bit)
+    // Carica ir_addr se c'è un salto (JMP), altrimenti incrementa
+    counter #(5) counter_pc_inst (
+        .clk(clk), .rst(rst), .load(ld_pc), .enab(inc_pc), 
+        .cnt_in(ir_addr), .cnt_out(pc_addr)
+    );
+
+    // E. Instruction Register (IR)
+    // Salva l'istruzione letta dal bus dati. 
+    // NOTA: IR ha 8 bit, ma in uscita dividiamo i fili in Opcode (3 bit) e Indirizzo (5 bit)
+    register #(8) register_ir_inst (
+        .clk(clk), .rst(rst), .load(ld_ir), 
+        .data_in(data), 
+        .data_out({opcode, ir_addr}) // Concatenazione inversa per dividere i bit
+    );
+
+    // F. Accumulatore (AC)
+    // Salva il risultato della ALU
+    register #(8) register_ac_inst (
+        .clk(clk), .rst(rst), .load(ld_ac), 
+        .data_in(alu_out), .data_out(ac_out)
+    );
+
+    // G. ALU
+    // Fa calcoli tra Accumulatore e Bus Dati
+    alu #(8) alu_inst (
+        .in_a(ac_out), .in_b(data), .opcode(opcode), 
+        .alu_out(alu_out), .a_is_zero(zero)
+    );
+
+    // H. Data Driver (Buffer Tri-State)
+    // Se abilitato (data_e), spara il risultato della ALU sul bus dati (per scrivere in memoria)
+    driver #(8) driver_inst (
+        .data_in(alu_out), .data_en(data_e), .data_out(data)
+    );
+
+    // I. Memoria RAM
+    // Riceve indirizzo dal Mux, legge/scrive sul bus dati
+    memory #(5, 8) memory_inst (
+        .clk(clk), .rd(rd), .wr(wr), .addr(addr), .data(data)
+    );
+
+endmodule
